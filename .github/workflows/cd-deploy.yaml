@@ -7,7 +7,6 @@ on:
       - "CI - adservice"
       - "CI - cartservice"
       - "CI - checkoutservice"
-      - "CI - currencyservice"
       - "CI - emailservice"
       - "CI - frontend"
       - "CI - productcatalogservice"
