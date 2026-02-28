@@ -12,7 +12,7 @@ variable "name" {
 
 variable "region" {
   type        = string
-  description = "Region for GKE Autopilot"
+  description = "Region for GKE cluster"
   default     = "us-central1"
 }
 

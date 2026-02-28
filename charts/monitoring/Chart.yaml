@@ -1,0 +1,15 @@
+apiVersion: v2
+name: monitoring
+description: VictoriaMetrics + Grafana + Loki observability stack
+type: application
+version: 0.1.0
+
+dependencies:
+  - name: victoria-metrics-k8s-stack
+    version: "0.72.2"
+    repository: https://victoriametrics.github.io/helm-charts
+    condition: victoria-metrics-k8s-stack.enabled
+  - name: loki-stack
+    version: "2.10.2"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki-stack.enabled

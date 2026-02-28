@@ -1,0 +1,69 @@
+{{- if and .Values.externalDashboards.enabled .Values.externalDashboards.dashboards.logs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    grafana_dashboard: "1"
+  name: logs-dashboard
+data:
+  logs.json: |-
+    {
+      "editable": true,
+      "panels": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 },
+          "id": 1,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "expr": "{namespace=\"$namespace\", pod=~\"$pod\"}",
+              "refId": "A"
+            }
+          ],
+          "title": "Logs",
+          "type": "logs"
+        }
+      ],
+      "schemaVersion": 39,
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "label": "Namespace",
+            "type": "query",
+            "datasource": { "type": "loki", "uid": "loki" },
+            "query": { "label": "namespace", "stream": "", "type": 1 },
+            "refresh": 2,
+            "sort": 1
+          },
+          {
+            "name": "pod",
+            "label": "Pod",
+            "type": "query",
+            "datasource": { "type": "loki", "uid": "loki" },
+            "query": { "label": "pod", "stream": "{namespace=\"$namespace\"}", "type": 1 },
+            "refresh": 2,
+            "sort": 1,
+            "includeAll": true,
+            "allValue": ".+",
+            "multi": true
+          }
+        ]
+      },
+      "tags": ["logs", "loki"],
+      "time": { "from": "now-15m", "to": "now" },
+      "title": "Logs Explorer",
+      "uid": "logs-explorer"
+    }
+{{- end }}

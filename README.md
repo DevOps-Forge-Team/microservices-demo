@@ -1,169 +1,370 @@
-<!-- <p align="center">
-<img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
-</p> -->
-![Continuous Integration](https://github.com/GoogleCloudPlatform/microservices-demo/workflows/Continuous%20Integration%20-%20Main/Release/badge.svg)
+<p align="center">
+  <img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="260" alt="Online Boutique" />
+</p>
 
-**Online Boutique** is a cloud-first microservices demo application.  The application is a
-web-based e-commerce app where users can browse items, add them to the cart, and purchase them.
+<h1 align="center">Online Boutique — Cloud Infrastructure & DevOps</h1>
 
-Google uses this application to demonstrate how developers can modernize enterprise applications using Google Cloud products, including: [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine), [Cloud Service Mesh (CSM)](https://cloud.google.com/service-mesh), [gRPC](https://grpc.io/), [Cloud Operations](https://cloud.google.com/products/operations), [Spanner](https://cloud.google.com/spanner), [Memorystore](https://cloud.google.com/memorystore), [AlloyDB](https://cloud.google.com/alloydb), and [Gemini](https://ai.google.dev/). This application works on any Kubernetes cluster.
+<p align="center">
+  <strong>Production-grade microservices deployment on GCP with Terraform, GitHub Actions CI/CD, and a full observability stack.</strong>
+</p>
 
-If you’re using this demo, please **★Star** this repository to show your interest!
+<p align="center">
+  <a href="#architecture"><img src="https://img.shields.io/badge/GCP-Google%20Cloud-4285F4?logo=googlecloud&logoColor=white" alt="GCP" /></a>
+  <a href="#infrastructure-as-code"><img src="https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white" alt="Terraform" /></a>
+  <a href="#cicd-pipeline"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions" /></a>
+  <a href="#monitoring--observability"><img src="https://img.shields.io/badge/Grafana-Dashboards-F46800?logo=grafana&logoColor=white" alt="Grafana" /></a>
+  <a href="#monitoring--observability"><img src="https://img.shields.io/badge/VictoriaMetrics-Metrics-621773" alt="VictoriaMetrics" /></a>
+  <a href="#kubernetes"><img src="https://img.shields.io/badge/Kubernetes-GKE-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes" /></a>
+</p>
 
-**Note to Googlers:** Please fill out the form at [go/microservices-demo](http://go/microservices-demo).
+---
+
+## Overview
+
+**Online Boutique** is an 11-service e-commerce microservices application originally created by Google Cloud. This repository extends it with a complete DevOps infrastructure: **Infrastructure as Code**, **CI/CD pipelines**, **multi-environment deployments** (staging + production), and a **full monitoring stack** with custom Grafana dashboards.
+
+| Home Page | Checkout Screen |
+| --- | --- |
+| [![Screenshot of store homepage](/docs/img/online-boutique-frontend-1.png)](/docs/img/online-boutique-frontend-1.png) | [![Screenshot of checkout screen](/docs/img/online-boutique-frontend-2.png)](/docs/img/online-boutique-frontend-2.png) |
+
+---
 
 ## Architecture
 
-**Online Boutique** is composed of 11 microservices written in different
-languages that talk to each other over gRPC.
+The entire platform runs on **Google Cloud Platform** inside a single GKE cluster with namespace-level isolation for staging, production, and monitoring.
 
-[![Architecture of
-microservices](/docs/img/architecture-diagram.png)](/docs/img/architecture-diagram.png)
+<p align="center">
+  <img src="/docs/img/infrastructure-diagram.png" alt="Infrastructure Diagram" width="100%" />
+</p>
 
-Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
+### High-Level Components
 
-| Service                                              | Language      | Description                                                                                                                       |
-| ---------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [frontend](/src/frontend)                           | Go            | Exposes an HTTP server to serve the website. Does not require signup/login and generates session IDs for all users automatically. |
-| [cartservice](/src/cartservice)                     | C#            | Stores the items in the user's shopping cart in Redis and retrieves it.                                                           |
-| [productcatalogservice](/src/productcatalogservice) | Go            | Provides the list of products from a JSON file and ability to search products and get individual products.                        |
-| [currencyservice](/src/currencyservice)             | Node.js       | Converts one money amount to another currency. Uses real values fetched from European Central Bank. It's the highest QPS service. |
-| [paymentservice](/src/paymentservice)               | Node.js       | Charges the given credit card info (mock) with the given amount and returns a transaction ID.                                     |
-| [shippingservice](/src/shippingservice)             | Go            | Gives shipping cost estimates based on the shopping cart. Ships items to the given address (mock)                                 |
-| [emailservice](/src/emailservice)                   | Python        | Sends users an order confirmation email (mock).                                                                                   |
-| [checkoutservice](/src/checkoutservice)             | Go            | Retrieves user cart, prepares order and orchestrates the payment, shipping and the email notification.                            |
-| [recommendationservice](/src/recommendationservice) | Python        | Recommends other products based on what's given in the cart.                                                                      |
-| [adservice](/src/adservice)                         | Java          | Provides text ads based on given context words.                                                                                   |
-| [loadgenerator](/src/loadgenerator)                 | Python/Locust | Continuously sends requests imitating realistic user shopping flows to the frontend.                                              |
+```
+Google Cloud Platform (forgeteam)
+├── GCS Bucket (Terraform Remote State)
+│   ├── state/cluster
+│   ├── state/monitoring
+│   ├── state/staging
+│   └── state/production
+│
+├── Artifact Registry (Docker images)
+│
+└── GKE Cluster (forgeteam-online-boutique)
+    ├── Namespace: staging          ← 11 microservices + LoadBalancer
+    ├── Namespace: production       ← 11 microservices + LoadBalancer
+    └── Namespace: monitoring       ← VictoriaMetrics + Grafana + Loki
+```
 
-## Screenshots
+### Microservices
 
-| Home Page                                                                                                         | Checkout Screen                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [![Screenshot of store homepage](/docs/img/online-boutique-frontend-1.png)](/docs/img/online-boutique-frontend-1.png) | [![Screenshot of checkout screen](/docs/img/online-boutique-frontend-2.png)](/docs/img/online-boutique-frontend-2.png) |
+The application is composed of 11 microservices written in different languages, communicating over gRPC:
 
-## Quickstart (GKE)
+| Service | Language | Description |
+| --- | --- | --- |
+| **frontend** | Go | HTTP server serving the web UI, generates session IDs automatically |
+| **cartservice** | C# | Stores shopping cart items in Redis |
+| **productcatalogservice** | Go | Product listing and search from a JSON catalog |
+| **currencyservice** | Node.js | Currency conversion using ECB rates (highest QPS service) |
+| **paymentservice** | Node.js | Mock credit card payment processing |
+| **shippingservice** | Go | Shipping cost estimates and mock shipment |
+| **emailservice** | Python | Mock order confirmation emails |
+| **checkoutservice** | Go | Orchestrates payment, shipping, and email notification |
+| **recommendationservice** | Python | Product recommendations based on cart contents |
+| **adservice** | Java | Context-based text advertisements |
+| **loadgenerator** | Python/Locust | Simulates realistic user shopping flows |
 
-1. Ensure you have the following requirements:
-   - [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects#creating_a_project).
-   - Shell environment with `gcloud`, `git`, and `kubectl`.
+---
 
-2. Clone the latest major version.
+## Technology Choices & Why
 
-   ```sh
-   git clone --depth 1 --branch v0 https://github.com/GoogleCloudPlatform/microservices-demo.git
-   cd microservices-demo/
-   ```
+### Why GKE (Google Kubernetes Engine)
 
-   The `--depth 1` argument skips downloading git history.
+- **Native GCP integration** — seamless IAM, logging, monitoring, and networking
+- **Spot instances support** — up to 60-91% cost savings on compute
+- **Autopilot/Standard flexibility** — we use Standard mode with spot node pools for cost control
+- **Built-in load balancing** — native L4/L7 integration without extra setup
 
-3. Set the Google Cloud project and region and ensure the Google Kubernetes Engine API is enabled.
+### Why Terraform
 
-   ```sh
-   export PROJECT_ID=<PROJECT_ID>
-   export REGION=us-central1
-   gcloud services enable container.googleapis.com \
-     --project=${PROJECT_ID}
-   ```
+- **Declarative infrastructure** — the entire cluster, monitoring, and application deployment is codified
+- **State isolation** — four separate state files (cluster, monitoring, staging, production) prevent blast radius issues
+- **Reproducibility** — `terraform apply` provisions everything from zero, `terraform destroy` tears it all down cleanly
+- **Module reuse** — custom modules for GKE, monitoring, and application deployment
 
-   Substitute `<PROJECT_ID>` with the ID of your Google Cloud project.
+### Why VictoriaMetrics over Prometheus
 
-4. Create a GKE cluster and get the credentials for it.
+- **Lower resource usage** — single-binary `vmsingle` handles ingestion and querying with ~3x less memory than Prometheus
+- **Full PromQL compatibility** — drop-in replacement, all existing dashboards and queries work
+- **Built-in Kubernetes operator** — `VMAgent`, `VMSingle`, service discovery via CRDs
+- **Long-term storage** — efficient compression, no need for Thanos/Cortex sidecar architecture
 
-   ```sh
-   gcloud container clusters create-auto online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+### Why Loki for Logs
 
-   Creating the cluster may take a few minutes.
+- **Label-based indexing** — same label model as Prometheus/VictoriaMetrics, no full-text indexing overhead
+- **Lightweight** — doesn't index log content, dramatically cheaper to run than Elasticsearch
+- **Native Grafana integration** — first-class datasource, LogQL queries right in the same dashboards
+- **Promtail DaemonSet** — automatically collects logs from every node and pod
 
-5. Deploy Online Boutique to the cluster.
+### Why Kustomize for App Deployment
 
-   ```sh
-   kubectl apply -f ./release/kubernetes-manifests.yaml
-   ```
+- **No templating complexity** — patches over plain YAML, easy to understand
+- **Built-in overlay model** — `base` + `overlays/staging` + `overlays/production` pattern
+- **Kubectl native** — `kubectl apply -k` works out of the box, no extra tooling
+- **Component system** — shared components like `without-loadgenerator` for environment-specific config
 
-6. Wait for the pods to be ready.
+---
 
-   ```sh
-   kubectl get pods
-   ```
+## Infrastructure as Code
 
-   After a few minutes, you should see the Pods in a `Running` state:
+The Terraform configuration is split into **four isolated environments**, each with its own state:
 
-   ```
-   NAME                                     READY   STATUS    RESTARTS   AGE
-   adservice-76bdd69666-ckc5j               1/1     Running   0          2m58s
-   cartservice-66d497c6b7-dp5jr             1/1     Running   0          2m59s
-   checkoutservice-666c784bd6-4jd22         1/1     Running   0          3m1s
-   currencyservice-5d5d496984-4jmd7         1/1     Running   0          2m59s
-   emailservice-667457d9d6-75jcq            1/1     Running   0          3m2s
-   frontend-6b8d69b9fb-wjqdg                1/1     Running   0          3m1s
-   loadgenerator-665b5cd444-gwqdq           1/1     Running   0          3m
-   paymentservice-68596d6dd6-bf6bv          1/1     Running   0          3m
-   productcatalogservice-557d474574-888kr   1/1     Running   0          3m
-   recommendationservice-69c56b74d4-7z8r5   1/1     Running   0          3m1s
-   redis-cart-5f59546cdd-5jnqf              1/1     Running   0          2m58s
-   shippingservice-6ccc89f8fd-v686r         1/1     Running   0          2m58s
-   ```
+```
+terraform/
+├── deploy.sh                    # One-command orchestrator
+├── environments/
+│   ├── cluster/                 # GKE cluster + node pools
+│   ├── monitoring/              # Observability stack (Helm)
+│   ├── staging/                 # App deployment to staging namespace
+│   └── production/              # App deployment to production namespace
+├── modules/
+│   ├── gke/                     # GKE cluster module
+│   ├── monitoring/              # Monitoring Helm release module
+│   └── onlineboutique/          # Kustomize-based app deployment module
+└── scripts/
+    └── install-helm.sh
+```
 
-7. Access the web frontend in a browser using the frontend's external IP.
+### One-Command Deploy & Destroy
 
-   ```sh
-   kubectl get service frontend-external | awk '{print $4}'
-   ```
+```bash
+# Deploy everything (cluster → monitoring → staging → production)
+./terraform/deploy.sh apply
 
-   Visit `http://EXTERNAL_IP` in a web browser to access your instance of Online Boutique.
+# Deploy specific environment only
+./terraform/deploy.sh apply monitoring
 
-8. Congrats! You've deployed the default Online Boutique. To deploy a different variation of Online Boutique (e.g., with Google Cloud Operations tracing, Istio, etc.), see [Deploy Online Boutique variations with Kustomize](#deploy-online-boutique-variations-with-kustomize).
+# Tear down everything (reverse order, with CRD cleanup)
+./terraform/deploy.sh destroy
 
-9. Once you are done with it, delete the GKE cluster.
+# Destroy specific environment
+./terraform/deploy.sh destroy monitoring
+```
 
-   ```sh
-   gcloud container clusters delete online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+The deploy script handles:
+- Automatic Helm dependency building for charts
+- Correct apply/destroy ordering
+- Terraform init + auto-approve for each environment
 
-   Deleting the cluster may take a few minutes.
+### Clean Destroy
 
-## Additional deployment options
+The monitoring module includes a custom cleanup provisioner that handles CRD finalizer removal and namespace force-deletion — solving the common Kubernetes problem where `terraform destroy` hangs on VictoriaMetrics CRDs.
 
-- **Terraform**: [See these instructions](/terraform) to learn how to deploy Online Boutique using [Terraform](https://www.terraform.io/intro).
-- **Istio / Cloud Service Mesh**: [See these instructions](/kustomize/components/service-mesh-istio/README.md) to deploy Online Boutique alongside an Istio-backed service mesh.
-- **Non-GKE clusters (Minikube, Kind, etc)**: See the [Development guide](/docs/development-guide.md) to learn how you can deploy Online Boutique on non-GKE clusters.
-- **AI assistant using Gemini**: [See these instructions](/kustomize/components/shopping-assistant/README.md) to deploy a Gemini-powered AI assistant that suggests products to purchase based on an image.
-- **And more**: The [`/kustomize` directory](/kustomize) contains instructions for customizing the deployment of Online Boutique with other variations.
+---
 
-## Documentation
+## CI/CD Pipeline
 
-- [Development](/docs/development-guide.md) to learn how to run and develop this app locally.
+GitHub Actions automates the build-push-deploy cycle with a multi-stage pipeline:
 
-## Demos featuring Online Boutique
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌────────────────────┐
+│  Push to     │────▶│  Detect      │────▶│  Build & Push   │────▶│  Deploy to         │
+│  main branch │     │  Changes     │     │  to Artifact    │     │  Staging           │
+│              │     │  (frontend/  │     │  Registry       │     │  (kubectl apply -k)│
+│              │     │   cartservice│     │                 │     │                    │
+└─────────────┘     └──────────────┘     └─────────────────┘     └────────┬───────────┘
+                                                                          │
+                                                                          ▼
+                                                                ┌────────────────────┐
+                                                                │  Deploy to         │
+                                                                │  Production        │
+                                                                │  (manual approval) │
+                                                                └────────────────────┘
+```
 
-- [Security hardening of the OnlineBoutique sample apps with the Docker Hardened Images (DHI)](https://medium.com/google-cloud/security-hardening-of-the-onlineboutique-sample-apps-with-docker-hardened-images-dhi-ca1fad348343)
-- [alpine, distroless or scratch?](https://medium.com/google-cloud/alpine-distroless-or-scratch-caac35250e0b)
-- [Platform Engineering in action: Deploy the Online Boutique sample apps with Score and Humanitec](https://medium.com/p/d99101001e69)
-- [The new Kubernetes Gateway API with Istio and Anthos Service Mesh (ASM)](https://medium.com/p/9d64c7009cd)
-- [Use Azure Redis Cache with the Online Boutique sample on AKS](https://medium.com/p/981bd98b53f8)
-- [Sail Sharp, 8 tips to optimize and secure your .NET containers for Kubernetes](https://medium.com/p/c68ba253844a)
-- [Deploy multi-region application with Anthos and Google cloud Spanner](https://medium.com/google-cloud/a2ea3493ed0)
-- [Use Google Cloud Memorystore (Redis) with the Online Boutique sample on GKE](https://medium.com/p/82f7879a900d)
-- [Use Helm to simplify the deployment of Online Boutique, with a Service Mesh, GitOps, and more!](https://medium.com/p/246119e46d53)
-- [How to reduce microservices complexity with Apigee and Anthos Service Mesh](https://cloud.google.com/blog/products/application-modernization/api-management-and-service-mesh-go-together)
-- [gRPC health probes with Kubernetes 1.24+](https://medium.com/p/b5bd26253a4c)
-- [Use Google Cloud Spanner with the Online Boutique sample](https://medium.com/p/f7248e077339)
-- [Seamlessly encrypt traffic from any apps in your Mesh to Memorystore (redis)](https://medium.com/google-cloud/64b71969318d)
-- [Strengthen your app's security with Cloud Service Mesh and Anthos Config Management](https://cloud.google.com/service-mesh/docs/strengthen-app-security)
-- [From edge to mesh: Exposing service mesh applications through GKE Ingress](https://cloud.google.com/architecture/exposing-service-mesh-apps-through-gke-ingress)
-- [Take the first step toward SRE with Cloud Operations Sandbox](https://cloud.google.com/blog/products/operations/on-the-road-to-sre-with-cloud-operations-sandbox)
-- [Deploying the Online Boutique sample application on Cloud Service Mesh](https://cloud.google.com/service-mesh/docs/onlineboutique-install-kpt)
-- [Anthos Service Mesh Workshop: Lab Guide](https://codelabs.developers.google.com/codelabs/anthos-service-mesh-workshop)
-- [KubeCon EU 2019 - Reinventing Networking: A Deep Dive into Istio's Multicluster Gateways - Steve Dake, Independent](https://youtu.be/-t2BfT59zJA?t=982)
-- Google Cloud Next'18 SF
-  - [Day 1 Keynote](https://youtu.be/vJ9OaAqfxo4?t=2416) showing GKE On-Prem
-  - [Day 3 Keynote](https://youtu.be/JQPOPV_VH5w?t=815) showing Stackdriver
-    APM (Tracing, Code Search, Profiler, Google Cloud Build)
-  - [Introduction to Service Management with Istio](https://www.youtube.com/watch?v=wCJrdKdD6UM&feature=youtu.be&t=586)
-- [Google Cloud Next'18 London – Keynote](https://youtu.be/nIq2pkNcfEI?t=3071)
-  showing Stackdriver Incident Response Management
-- [Microservices demo showcasing Go Micro](https://github.com/go-micro/demo)
+### Pipeline Features
+
+| Feature | Details |
+| --- | --- |
+| **Change detection** | Only builds services that changed (`dorny/paths-filter`) |
+| **Matrix builds** | Parallel builds for `frontend` and `cartservice` |
+| **Image tagging** | Tags with commit SHA (`${GITHUB_SHA::8}`) + `latest` |
+| **Registry** | Google Artifact Registry (`us-central1-docker.pkg.dev`) |
+| **Staging deploy** | Automatic on push to `main` |
+| **Production deploy** | Sequential after staging, requires environment approval |
+| **Auth** | GCP Service Account key via GitHub Secrets (`GCP_SA_KEY`) |
+
+### Trigger Paths
+
+The pipeline triggers only when relevant code changes:
+
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/frontend/**'
+      - 'src/cartservice/**'
+      - '.github/workflows/ci-cd-deploy.yaml'
+  workflow_dispatch:  # Manual trigger
+```
+
+---
+
+## Monitoring & Observability
+
+The monitoring stack deploys into the `monitoring` namespace via a custom Helm chart that bundles:
+
+| Component | Role |
+| --- | --- |
+| **VictoriaMetrics Operator** | Manages VMAgent, VMSingle via CRDs |
+| **VMSingle** | Time-series database (metrics storage) |
+| **VMAgent** | Scrapes metrics from all pods and nodes |
+| **Grafana** | Dashboard UI, exposed via LoadBalancer |
+| **Loki** | Log aggregation (label-indexed) |
+| **Promtail** | DaemonSet log collector on every node |
+| **kube-state-metrics** | Kubernetes object state metrics |
+| **Prometheus Node Exporter** | Node hardware/OS metrics |
+
+<p align="center">
+  <img src="/docs/img/gke-monitoring-stack.png" alt="GKE Monitoring Stack" width="100%" />
+</p>
+
+### Grafana Dashboards
+
+Three custom dashboards are provisioned automatically as Kubernetes ConfigMaps:
+
+#### 1. Reliability Dashboard
+
+Tracks deployment availability (available/desired replicas) per namespace, pod restart counts, and OOM-killed containers. Namespace selector allows switching between staging and production.
+
+<p align="center">
+  <img src="/docs/img/dashboard-reliability.png" alt="Reliability Dashboard — 100% Availability" width="100%" />
+</p>
+
+#### 2. Logs Explorer
+
+Aggregates container logs from Loki with namespace and pod selectors. Supports filtering by specific pod or viewing all pods across a namespace.
+
+#### 3. HPA (Horizontal Pod Autoscaler) Dashboard
+
+Visualizes autoscaler status: desired vs current replicas, min/max bounds, metric targets, and utilization thresholds.
+
+### Built-in Kubernetes Dashboards
+
+Additionally, the following dashboards from the VictoriaMetrics stack are enabled:
+
+- **Kubernetes / Views / Global** — cluster-wide overview
+- **Kubernetes / Views / Namespaces** — per-namespace resource usage
+- **Kubernetes / Views / Nodes** — node CPU, memory, disk
+- **Kubernetes / Views / Pods** — pod-level resource consumption
+- **Kubernetes / Kubelet** — kubelet performance
+- **Kubernetes / API Server** — API server latency and error rates
+- **Node Exporter Full** — detailed node hardware metrics
+
+---
+
+## Deployed System
+
+The GKE cluster runs all workloads across three namespaces:
+
+<p align="center">
+  <img src="/docs/img/gke-workloads.png" alt="GKE Workloads" width="100%" />
+</p>
+
+### Access Points
+
+| Endpoint | How to Get IP |
+| --- | --- |
+| **Staging Frontend** | `kubectl get svc frontend-external -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+| **Production Frontend** | `kubectl get svc frontend-external -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+| **Grafana** | `kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- GCP project with billing enabled
+- `gcloud`, `terraform`, `kubectl`, `helm` installed
+- GCP Service Account with permissions for GKE, GCS, Artifact Registry
+
+### Deploy Everything
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/<your-org>/microservices-demo.git
+cd microservices-demo
+
+# 2. Authenticate with GCP
+gcloud auth login
+gcloud config set project <PROJECT_ID>
+
+# 3. Deploy all infrastructure
+./terraform/deploy.sh apply
+
+# 4. Get frontend IPs
+kubectl get svc frontend-external -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+kubectl get svc frontend-external -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+# 5. Access Grafana
+kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+# Default credentials: admin / forgeteam
+```
+
+### Tear Down
+
+```bash
+./terraform/deploy.sh destroy
+```
+
+---
+
+## Repository Structure
+
+```
+.
+├── .github/workflows/
+│   └── ci-cd-deploy.yaml          # GitHub Actions CI/CD pipeline
+├── charts/
+│   └── monitoring/                 # Custom Helm chart for observability stack
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│           └── grafana/dashboards/ # Custom Grafana dashboards (ConfigMaps)
+├── kustomize/
+│   ├── base/                       # Base Kubernetes manifests (11 services)
+│   ├── components/                 # Shared Kustomize components
+│   └── overlays/
+│       ├── staging/                # Staging overlay (namespace: staging)
+│       └── production/             # Production overlay (namespace: production)
+├── src/                            # Microservice source code (11 services)
+├── terraform/
+│   ├── deploy.sh                   # One-command deploy/destroy orchestrator
+│   ├── environments/               # Per-environment Terraform configs
+│   └── modules/                    # Reusable Terraform modules
+└── README.md
+```
+
+---
+
+## Architecture Decisions Record
+
+| Decision | Choice | Rationale |
+| --- | --- | --- |
+| Cloud Provider | GCP | Native GKE support, Artifact Registry, free tier credits |
+| IaC Tool | Terraform | Multi-provider, state management, module system |
+| Cluster Type | GKE Standard + Spot | Cost optimization with spot node pools (60-91% savings) |
+| App Deployment | Kustomize | Native kubectl support, overlay model for multi-env |
+| CI/CD | GitHub Actions | Integrated with repo, matrix builds, environment approvals |
+| Metrics Backend | VictoriaMetrics | 3x less memory than Prometheus, full PromQL compatible |
+| Log Backend | Loki + Promtail | Lightweight, label-based, native Grafana integration |
+| Dashboards | Grafana | Industry standard, supports VM + Loki datasources |
+| State Management | GCS (4 isolated states) | Prevents blast radius, per-environment lifecycle |
+| Container Registry | Artifact Registry | Regional, GCP-native, IAM-integrated |
+
+---
+
+<p align="center">
+  <sub>Based on <a href="https://github.com/GoogleCloudPlatform/microservices-demo">Google Cloud microservices-demo</a> — extended with production-grade DevOps infrastructure.</sub>
+</p>

@@ -1,0 +1,10 @@
+# forgeteam: copy to terraform.tfvars and set values.
+# Apply cluster first.
+
+project_id             = "forgeteam"
+tfstate_bucket         = "forgeteam-tfstate-1771882722"
+region                 = "us-central1"
+use_remote_state       = true
+grafana_admin_password = "forgeteam"
+grafana_expose         = false
+# Set grafana_expose = true to get an external IP for Grafana

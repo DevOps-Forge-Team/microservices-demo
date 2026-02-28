@@ -1,8 +1,10 @@
-# Production overlay: namespace (uses base with public images)
+# Production overlay: namespace (uses base with public images, no loadgenerator)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: production
 resources:
   - ../../base
+components:
+  - ../../components/without-loadgenerator
 commonLabels:
   environment: production

@@ -11,7 +11,7 @@ Terraform provisions and deprovisions infrastructure: one GKE cluster and two en
 ### What you need
 
 - **Repo**: clone as usual (`git clone ...`, then `cd microservices-demo`).
-- **Tools**: Terraform >= 1.5, `gcloud`, `kubectl`.
+- **Tools**: Terraform >= 1.5, `gcloud`, `kubectl`, **Helm** (for monitoring). If Helm is missing, run `./terraform/scripts/install-helm.sh` or `deploy.sh apply monitoring` will install it automatically.
 - **GCP access**: permissions to use the project **forgeteam** (and the bucket `forgeteam-tfstate-1771882722` for state).  
   Authenticate once:
   ```bash
@@ -22,8 +22,9 @@ Terraform provisions and deprovisions infrastructure: one GKE cluster and two en
 ### Terraform state (important)
 
 - **One bucket**: `forgeteam-tfstate-1771882722` (GCS). All Terraform state lives here.
-- **Three states** (different prefixes in that bucket):
+- **Four states** (different prefixes in that bucket):
   - `state/cluster` — GKE cluster only.
+  - `state/monitoring` — VictoriaMetrics + Grafana + Loki observability stack.
   - `state/staging` — app deploy in namespace `staging`.
   - `state/production` — app deploy in namespace `production`.
 
@@ -129,29 +130,36 @@ Commit `terraform.tfvars.example`; keep real `terraform.tfvars` out of git if it
 
 | Environment | State key (prefix)   | What it manages                          |
 |-------------|----------------------|------------------------------------------|
-| cluster     | `state/cluster`      | GKE cluster only                         |
-| staging     | `state/staging`      | Deploy to namespace `staging` only       |
-| production  | `state/production`   | Deploy to namespace `production` only    |
+| cluster     | `state/cluster`      | GKE cluster only                             |
+| monitoring  | `state/monitoring`   | VictoriaMetrics + Grafana + Loki stack       |
+| staging     | `state/staging`      | Deploy to namespace `staging` only           |
+| production  | `state/production`   | Deploy to namespace `production` only        |
 
-So: **one bucket, three states** — correct for isolating cluster, staging, and production. Staging and prod each have their own state and only deploy app manifests to their namespace; they read cluster name/region from cluster state via `terraform_remote_state`.
+So: **one bucket, four states** — correct for isolating cluster, monitoring, staging, and production. Monitoring deploys the observability stack (VictoriaMetrics + Grafana + Loki). Staging and prod each have their own state and only deploy app manifests to their namespace; they read cluster name/region from cluster state via `terraform_remote_state`.
 
 ## Structure
 
 ```
 terraform/
 ├── modules/
-│   ├── gke/          # GKE Autopilot cluster + optional API enablement
+│   ├── gke/          # GKE cluster + spot node pool + optional API enablement
+│   ├── monitoring/   # VictoriaMetrics + Grafana + Loki via Helm
 │   └── app-deploy/   # get-credentials + kubectl apply -k (deploy into namespace)
-└── environments/
-    ├── cluster/      # single cluster per project
-    ├── staging/      # deploy to namespace staging
-    └── production/   # deploy to namespace production
+├── environments/
+│   ├── cluster/      # single cluster per project
+│   ├── monitoring/   # observability stack (VictoriaMetrics + Grafana + Loki)
+│   ├── staging/      # deploy to namespace staging
+│   └── production/   # deploy to namespace production
+└── scripts/
+    ├── install-helm.sh                # install Helm 3
+    └── grant-monitoring-permissions.sh # grant IAM for monitoring CRDs
 ```
 
 ## Prerequisites
 
 - [Terraform](https://www.terraform.io/downloads) >= 1.5
 - GCP project and `gcloud` CLI
+- [Helm](https://helm.sh/docs/intro/install/) (for monitoring env). Install: `./terraform/scripts/install-helm.sh`
 - Auth: `gcloud auth application-default login` and `gcloud config set project YOUR_PROJECT_ID`
 
 ## How to run (order matters)
@@ -173,10 +181,11 @@ Frontend: `kubectl get svc frontend-external -n production -o jsonpath='{.status
 
 All environments use the same bucket **forgeteam-tfstate-1771882722** with a distinct prefix per env:
 
-| Environment | Prefix            |
-|-------------|-------------------|
-| cluster     | `state/cluster`   |
-| staging     | `state/staging`   |
+| Environment | Prefix             |
+|-------------|--------------------|
+| cluster     | `state/cluster`    |
+| monitoring  | `state/monitoring` |
+| staging     | `state/staging`    |
 | production  | `state/production` |
 
 Bucket is set in each env's `backend.tf`; run `terraform init` with no extra flags.

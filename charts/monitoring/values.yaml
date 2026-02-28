@@ -1,0 +1,104 @@
+victoria-metrics-k8s-stack:
+  enabled: true
+  fullnameOverride: "vm"
+  victoria-metrics-operator:
+    crds:
+      plain: true
+  alertmanager:
+    enabled: false
+  vmalert:
+    enabled: false
+  grafana:
+    plugins:
+      - grafana-lokiexplore-app
+    service:
+      type: ClusterIP
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+  defaultDatasources:
+    extra:
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://monitoring-loki:3100
+        access: proxy
+        isDefault: false
+  defaultDashboards:
+    dashboards:
+      alertmanager-overview:
+        enabled: false
+      etcd:
+        enabled: false
+      grafana-overview:
+        enabled: false
+      kubernetes-controller-manager:
+        enabled: false
+      kubernetes-kubelet:
+        enabled: true
+      kubernetes-proxy:
+        enabled: false
+      kubernetes-scheduler:
+        enabled: false
+      kubernetes-system-api-server:
+        enabled: true
+      kubernetes-system-coredns:
+        enabled: false
+      kubernetes-views-global:
+        enabled: true
+      kubernetes-views-namespaces:
+        enabled: true
+      kubernetes-views-nodes:
+        enabled: true
+      kubernetes-views-pods:
+        enabled: true
+      node-exporter-full:
+        enabled: true
+      victoriametrics-backupmanager:
+        enabled: false
+      victoriametrics-cluster:
+        enabled: false
+      victoriametrics-operator:
+        enabled: false
+      victoriametrics-single-node:
+        enabled: false
+      victoriametrics-vmagent:
+        enabled: false
+      victoriametrics-vmalert:
+        enabled: false
+  defaultRules:
+    create: false
+  vmsingle:
+    spec:
+      resources:
+        limits:
+          memory: 3Gi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+
+loki-stack:
+  enabled: true
+  loki:
+    isDefault: false
+    persistence:
+      enabled: false
+    serviceName: monitoring-loki
+  promtail:
+    enabled: true
+    config:
+      clients:
+        - url: http://monitoring-loki:3100/loki/api/v1/push
+  grafana:
+    enabled: false
+
+externalDashboards:
+  enabled: true
+  dashboards:
+    logs:
+      enabled: true
+    hpa:
+      enabled: true
+    reliability:
+      enabled: true

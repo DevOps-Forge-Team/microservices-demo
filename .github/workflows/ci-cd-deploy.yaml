@@ -1,0 +1,127 @@
+name: "CI/CD: Build, Push, Deploy"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/frontend/**'
+      - 'src/cartservice/**'
+      - '.github/workflows/ci-cd-deploy.yaml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: forgeteam
+  REGION: us-central1
+  GAR_REGISTRY: ${{ vars.GAR_REGISTRY || 'us-central1-docker.pkg.dev/forgeteam/docker' }}
+  GKE_CLUSTER: forgeteam-online-boutique
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      cartservice: ${{ steps.filter.outputs.cartservice }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/frontend/**'
+            cartservice:
+              - 'src/cartservice/**'
+
+  build-push:
+    needs: detect-changes
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - service: frontend
+            context: src/frontend
+            dockerfile: src/frontend/Dockerfile
+            changed: ${{ needs.detect-changes.outputs.frontend }}
+          - service: cartservice
+            context: src/cartservice/src
+            dockerfile: src/cartservice/src/Dockerfile
+            changed: ${{ needs.detect-changes.outputs.cartservice }}
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.cartservice == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Skip if not changed
+        if: matrix.changed != 'true'
+        run: echo "No changes in ${{ matrix.service }}, skipping." && exit 0
+
+      - id: auth
+        if: matrix.changed == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for GAR
+        if: matrix.changed == 'true'
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push
+        if: matrix.changed == 'true'
+        run: |
+          IMAGE="${{ env.GAR_REGISTRY }}/${{ matrix.service }}"
+          TAG="${GITHUB_SHA::8}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" -f ${{ matrix.dockerfile }} ${{ matrix.context }}
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+
+  deploy-staging:
+    needs: build-push
+    runs-on: ubuntu-24.04
+    environment: staging
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to staging
+        run: |
+          kubectl create namespace staging --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -k kustomize/overlays/staging
+          echo "Staging deploy complete."
+          echo "Frontend IP:"
+          kubectl get svc frontend-external -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "(pending)"
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to production
+        run: |
+          kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -k kustomize/overlays/production
+          echo "Production deploy complete."
+          echo "Frontend IP:"
+          kubectl get svc frontend-external -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "(pending)"
