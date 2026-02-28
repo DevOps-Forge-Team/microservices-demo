@@ -34,7 +34,7 @@
 The entire platform runs on **Google Cloud Platform** inside a single GKE cluster with namespace-level isolation for staging, production, and monitoring.
 
 <p align="center">
-  <img src="/docs/img/infrastructure-diagram.png" alt="Infrastructure Diagram" width="100%" />
+  <img src="/pictures/high-infra-map.png" alt="Infrastructure Diagram" width="100%" />
 </p>
 
 ### High-Level Components
@@ -161,24 +161,44 @@ The monitoring module includes a custom cleanup provisioner that handles CRD fin
 
 ---
 
+## Deployed System on GKE
+
+The GKE cluster runs all workloads across three namespaces:
+
+<p align="center">
+  <img src="/pictures/gke.png" alt="GKE Cluster Overview" width="100%" />
+</p>
+
+GKE workloads view showing all deployments, DaemonSets, and StatefulSets across namespaces:
+
+<p align="center">
+  <img src="/pictures/gke_workflow.png" alt="GKE Workloads" width="100%" />
+</p>
+
+### Access Points
+
+| Endpoint | How to Get IP |
+| --- | --- |
+| **Staging Frontend** | `kubectl get svc frontend-external -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+| **Production Frontend** | `kubectl get svc frontend-external -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+| **Grafana** | `kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+
+---
+
 ## CI/CD Pipeline
 
 GitHub Actions automates the build-push-deploy cycle with a multi-stage pipeline:
 
+<p align="center">
+  <img src="/pictures/cicd_example.png" alt="CI/CD Pipeline Example" width="100%" />
+</p>
+
+### Pipeline Flow
+
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌────────────────────┐
-│  Push to     │────▶│  Detect      │────▶│  Build & Push   │────▶│  Deploy to         │
-│  main branch │     │  Changes     │     │  to Artifact    │     │  Staging           │
-│              │     │  (frontend/  │     │  Registry       │     │  (kubectl apply -k)│
-│              │     │   cartservice│     │                 │     │                    │
-└─────────────┘     └──────────────┘     └─────────────────┘     └────────┬───────────┘
-                                                                          │
-                                                                          ▼
-                                                                ┌────────────────────┐
-                                                                │  Deploy to         │
-                                                                │  Production        │
-                                                                │  (manual approval) │
-                                                                └────────────────────┘
+Push to main ──▶ Detect Changes ──▶ Build & Push to ──▶ Deploy to ──▶ Deploy to
+  (src/)           (paths-filter)     Artifact Registry    Staging       Production
+                                                        (automatic)   (manual approval)
 ```
 
 ### Pipeline Features
@@ -225,59 +245,64 @@ The monitoring stack deploys into the `monitoring` namespace via a custom Helm c
 | **kube-state-metrics** | Kubernetes object state metrics |
 | **Prometheus Node Exporter** | Node hardware/OS metrics |
 
-<p align="center">
-  <img src="/docs/img/gke-monitoring-stack.png" alt="GKE Monitoring Stack" width="100%" />
-</p>
-
 ### Grafana Dashboards
 
-Three custom dashboards are provisioned automatically as Kubernetes ConfigMaps:
+Custom and built-in dashboards are provisioned automatically as Kubernetes ConfigMaps.
 
-#### 1. Reliability Dashboard
+#### SRE / Reliability Dashboard
 
 Tracks deployment availability (available/desired replicas) per namespace, pod restart counts, and OOM-killed containers. Namespace selector allows switching between staging and production.
 
 <p align="center">
-  <img src="/docs/img/dashboard-reliability.png" alt="Reliability Dashboard — 100% Availability" width="100%" />
+  <img src="/pictures/sre_dash.png" alt="SRE / Reliability Dashboard" width="100%" />
 </p>
 
-#### 2. Logs Explorer
+#### Logs Explorer
 
 Aggregates container logs from Loki with namespace and pod selectors. Supports filtering by specific pod or viewing all pods across a namespace.
 
-#### 3. HPA (Horizontal Pod Autoscaler) Dashboard
-
-Visualizes autoscaler status: desired vs current replicas, min/max bounds, metric targets, and utilization thresholds.
-
-### Built-in Kubernetes Dashboards
-
-Additionally, the following dashboards from the VictoriaMetrics stack are enabled:
-
-- **Kubernetes / Views / Global** — cluster-wide overview
-- **Kubernetes / Views / Namespaces** — per-namespace resource usage
-- **Kubernetes / Views / Nodes** — node CPU, memory, disk
-- **Kubernetes / Views / Pods** — pod-level resource consumption
-- **Kubernetes / Kubelet** — kubelet performance
-- **Kubernetes / API Server** — API server latency and error rates
-- **Node Exporter Full** — detailed node hardware metrics
-
----
-
-## Deployed System
-
-The GKE cluster runs all workloads across three namespaces:
-
 <p align="center">
-  <img src="/docs/img/gke-workloads.png" alt="GKE Workloads" width="100%" />
+  <img src="/pictures/logs_dash.png" alt="Logs Explorer Dashboard" width="100%" />
 </p>
 
-### Access Points
+#### Kubernetes / Namespaces
 
-| Endpoint | How to Get IP |
-| --- | --- |
-| **Staging Frontend** | `kubectl get svc frontend-external -n staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
-| **Production Frontend** | `kubectl get svc frontend-external -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
-| **Grafana** | `kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].ip}'` |
+Per-namespace resource usage: CPU, memory, network I/O, and pod counts for staging and production environments.
+
+<p align="center">
+  <img src="/pictures/namespace_dash.png" alt="Namespace Dashboard" width="100%" />
+</p>
+
+#### Kubernetes / Nodes
+
+Node-level metrics: CPU utilization, memory usage, disk I/O, and network throughput across all cluster nodes.
+
+<p align="center">
+  <img src="/pictures/nodes_dash.png" alt="Nodes Dashboard" width="100%" />
+</p>
+
+#### Node Exporter Full
+
+Detailed node hardware metrics: CPU cores, load average, memory breakdown, filesystem usage, network errors, and system uptime.
+
+<p align="center">
+  <img src="/pictures/node_exporter_dash.png" alt="Node Exporter Dashboard" width="100%" />
+</p>
+
+### All Available Dashboards
+
+| Dashboard | Source | Description |
+| --- | --- | --- |
+| **SRE / Reliability** | Custom | Availability %, pod restarts, OOM kills per namespace |
+| **Logs Explorer** | Custom | Loki log viewer with namespace/pod selectors |
+| **HPA Autoscaler** | Custom | Replica counts, metric targets, utilization thresholds |
+| **Kubernetes / Global** | Built-in | Cluster-wide overview |
+| **Kubernetes / Namespaces** | Built-in | Per-namespace resource usage |
+| **Kubernetes / Nodes** | Built-in | Node CPU, memory, disk |
+| **Kubernetes / Pods** | Built-in | Pod-level resource consumption |
+| **Kubernetes / Kubelet** | Built-in | Kubelet performance metrics |
+| **Kubernetes / API Server** | Built-in | API server latency and error rates |
+| **Node Exporter Full** | Built-in | Detailed node hardware metrics |
 
 ---
 
@@ -338,6 +363,7 @@ kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.status.loadBalan
 │   └── overlays/
 │       ├── staging/                # Staging overlay (namespace: staging)
 │       └── production/             # Production overlay (namespace: production)
+├── pictures/                       # Screenshots (GKE, CI/CD, Dashboards)
 ├── src/                            # Microservice source code (11 services)
 ├── terraform/
 │   ├── deploy.sh                   # One-command deploy/destroy orchestrator
