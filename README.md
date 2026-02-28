@@ -193,6 +193,9 @@ GitHub Actions automates the build-push-deploy cycle with a multi-stage pipeline
   <img src="/pictures/cicd_example.png" alt="CI/CD Pipeline Example" width="100%" />
 </p>
 
+<p align="center">
+  <img src="/pictures/CICD_EXAMPLE.jpg" alt="CI/CD Pipeline Example" width="100%" />
+</p>
 ### Pipeline Flow
 
 ```
